@@ -90,9 +90,18 @@ We characterized every hardware block on the bench before imaging, rather than r
 | RF coil | Measured 0.76 + j56.6 Ω (vs. 1.71 + j102.6 Ω estimated); matched to 49.5 − j1.75 Ω with empirically tuned capacitors (517 / 47 pF); Q ≈ 74 |
 | Magnet | Hall-probe B₀ map to estimate the Larmor frequency and uniformity |
 
-| Transmit-path insertion loss | Matched coil (NanoVNA) |
-| :---: | :---: |
-| <img src="images/transmit_insertion_loss.png" width="420" alt="Insertion loss of the attenuator and T/R switch versus input voltage"> | <img src="images/coil_matching_s11.png" width="416" alt="Smith chart and S11 return loss of the matched RF coil"> |
+<div align="center">
+<table>
+  <tr>
+    <th>Transmit-path insertion loss</th>
+    <th>Matched coil (NanoVNA)</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="images/transmit_insertion_loss.png" width="400" alt="Insertion loss of the attenuator and T/R switch versus input voltage"></td>
+    <td align="center"><img src="images/coil_matching_s11.png" width="397" alt="Smith chart and S11 return loss of the matched RF coil"></td>
+  </tr>
+</table>
+</div>
 
 ### Signal and timing groundwork
 
@@ -101,24 +110,26 @@ We characterized every hardware block on the bench before imaging, rather than r
 - **Custom waveforms.** Programmable ramps (length, delay, shape, channel) became the gradient lobes.
 - **First sequence.** Two RF pulses (TE = 6 ms), a ramp waveform, and T/R and pulse-control lines formed the skeleton of the imaging sequence.
 
+<div align="center">
 <table>
   <tr>
     <th>Sinc pulse</th>
     <th>Its spectrum</th>
   </tr>
   <tr>
-    <td align="center"><img src="images/sinc_pulse.png" width="300" alt="Sinc pulse"></td>
-    <td align="center"><img src="images/sinc_spectrum.png" width="295" alt="Sinc spectrum"></td>
+    <td align="center"><img src="images/sinc_pulse.png" width="361" alt="Sinc pulse"></td>
+    <td align="center"><img src="images/sinc_spectrum.png" width="356" alt="Sinc spectrum"></td>
   </tr>
   <tr>
     <th>Two-pulse sequence</th>
     <th>Control lines</th>
   </tr>
   <tr>
-    <td align="center"><img src="images/two_pulse_sequence.png" width="300" alt="Two-pulse sequence"></td>
-    <td align="center"><img src="images/control_lines.png" width="293" alt="Control lines"></td>
+    <td align="center"><img src="images/two_pulse_sequence.png" width="379" alt="Two-pulse sequence"></td>
+    <td align="center"><img src="images/control_lines.png" width="370" alt="Control lines"></td>
   </tr>
 </table>
+</div>
 
 ---
 
@@ -188,24 +199,54 @@ rgdSamples_filt = filtfilt(b, a, rgdSamples)            # zero-phase
 rgdSamples_win  = rgdSamples_filt * np.hamming(len(rgdSamples_filt))
 ```
 
-| Raw capture | Filtered + windowed |
-| :---: | :---: |
-| <img src="images/echo_raw.png" width="307" alt="Raw capture"> | <img src="images/echo_filtered.png" width="312" alt="Filtered echo"> |
-| <img src="images/spectrum_unfiltered.png" width="291" alt="Unfiltered spectrum"> | <img src="images/spectrum_filtered.png" width="291" alt="Filtered spectrum"> |
+<div align="center">
+<table>
+  <tr>
+    <th>Raw capture</th>
+    <th>Filtered + windowed</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="images/echo_raw.png" width="373" alt="Raw capture"></td>
+    <td align="center"><img src="images/echo_filtered.png" width="379" alt="Filtered echo"></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="images/spectrum_unfiltered.png" width="354" alt="Unfiltered spectrum"></td>
+    <td align="center"><img src="images/spectrum_filtered.png" width="354" alt="Filtered spectrum"></td>
+  </tr>
+</table>
+</div>
 
 Automated analysis of the best echo gave T₂\* ≈ **0.28 ms**, an unshimmed linewidth of **2075 Hz (628 ppm)**, and SNR of **26 dB** (echo) vs. **7 dB** (spectrum).
 
-| Echo decay | Linewidth (FWHM) |
-| :---: | :---: |
-| <img src="images/echo_decay.png" width="325" alt="Echo decay"> | <img src="images/echo_linewidth.png" width="297" alt="Echo linewidth"> |
+<div align="center">
+<table>
+  <tr>
+    <th>Echo decay</th>
+    <th>Linewidth (FWHM)</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="images/echo_decay.png" width="374" alt="Echo decay"></td>
+    <td align="center"><img src="images/echo_linewidth.png" width="342" alt="Echo linewidth"></td>
+  </tr>
+</table>
+</div>
 
 ### Phase 3: Shimming
 
 DC shim offsets on AD2 #2 (limited to ±0.2 V) correct B₀ inhomogeneity, with the FWHM linewidth as feedback. Shimming narrowed the line from **1953 Hz to ~1220 Hz**. For gradient broadening to exceed this by 10×, imaging needs about **447 Hz/mm (1.05 G/cm)**.
 
-| Before shimming | After shimming |
-| :---: | :---: |
-| <img src="images/spectrum_before_shim.png" width="240" alt="Before shimming"> | <img src="images/spectrum_after_shim.png" width="240" alt="After shimming"> |
+<div align="center">
+<table>
+  <tr>
+    <th>Before shimming</th>
+    <th>After shimming</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="images/spectrum_before_shim.png" width="354" alt="Before shimming"></td>
+    <td align="center"><img src="images/spectrum_after_shim.png" width="354" alt="After shimming"></td>
+  </tr>
+</table>
+</div>
 
 ### Phase 4: Spatial encoding with gradients
 
@@ -220,9 +261,20 @@ AD2 #2 plays 4096-point gradient waveforms with linear ramps (`T_ramp`) to respe
 
 The GUI values matched the hand calculation, and the oscilloscope confirmed the lobe timing. Single-axis tests spread the line to **5000 Hz (Z)** and **4531 Hz (X)** for the same setting, so we added an empirical `1.28 / 0.56` correction and per-axis scaling.
 
-| GUI | Gradient lobes on the scope | Z gradient on |
-| :---: | :---: | :---: |
-| <img src="images/gui_gradient.jpg" width="240" alt="Parameter GUI"> | <img src="images/gradient_scope.jpg" width="300" alt="Oscilloscope gradient waveform"> | <img src="images/spectrum_z_gradient.png" width="300" alt="Spectrum with Z gradient"> |
+<div align="center">
+<table>
+  <tr>
+    <th>GUI</th>
+    <th>Gradient lobes on the scope</th>
+    <th>Z gradient on</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="images/gui_gradient.jpg" width="202" alt="Parameter GUI"></td>
+    <td align="center"><img src="images/gradient_scope.jpg" width="267" alt="Oscilloscope gradient waveform"></td>
+    <td align="center"><img src="images/spectrum_z_gradient.png" width="282" alt="Spectrum with Z gradient"></td>
+  </tr>
+</table>
+</div>
 
 ### Phase 5: Prototype imaging by projection reconstruction
 
@@ -236,26 +288,37 @@ Mixing the two gradient axes (sin θ, cos θ) rotates the readout direction, giv
 
 With 8 angles the image is dominated by streaks; 32 angles fill it in.
 
-| 8 projections: sinogram | 8 projections: backprojection |
-| :---: | :---: |
-| ![8-projection sinogram](images/sinogram_8.png) | ![8-projection backprojection](images/backprojection_8.png) |
+<div align="center">
+<table>
+  <tr>
+    <th>8 projections: sinogram</th>
+    <th>8 projections: backprojection</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="images/sinogram_8.png" width="347" alt="8-projection sinogram"></td>
+    <td align="center"><img src="images/backprojection_8.png" width="335" alt="8-projection backprojection"></td>
+  </tr>
+</table>
+</div>
 
+<div align="center">
 <table>
   <tr>
     <th>32 projections</th>
     <th>Sinogram</th>
   </tr>
   <tr>
-    <td rowspan="3" align="center"><img src="images/projections_32.png" width="460" alt="32 projections"></td>
-    <td align="center"><img src="images/sinogram_32.png" width="285" alt="Sinogram"></td>
+    <td rowspan="3" align="center"><img src="images/projections_32.png" width="430" alt="32 projections"></td>
+    <td align="center"><img src="images/sinogram_32.png" width="258" alt="Sinogram"></td>
   </tr>
   <tr>
     <th>Backprojection</th>
   </tr>
   <tr>
-    <td align="center"><img src="images/backprojection_32.png" width="265" alt="Backprojection"></td>
+    <td align="center"><img src="images/backprojection_32.png" width="240" alt="Backprojection"></td>
   </tr>
 </table>
+</div>
 
 Because every alignment or calibration error smears across the whole image, we moved to Fourier imaging.
 
@@ -286,10 +349,25 @@ magnitude_image[magnitude_image <= 0.2 * np.max(magnitude_image)] = 0
 
 ## Results
 
-| k-space | Raw reconstruction | After thresholding |
-| :---: | :---: | :---: |
-| ![k-space](images/k_space.png) | ![Reconstructed](images/reconstructed_image.png) | ![Filtered](images/filtered_image.png) |
-| Energy at the center | Objects over noisy background | Background removed |
+<div align="center">
+<table>
+  <tr>
+    <th>k-space</th>
+    <th>Raw reconstruction</th>
+    <th>After thresholding</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="images/k_space.png" width="257" alt="k-space"></td>
+    <td align="center"><img src="images/reconstructed_image.png" width="257" alt="Reconstructed"></td>
+    <td align="center"><img src="images/filtered_image.png" width="257" alt="Filtered"></td>
+  </tr>
+  <tr>
+    <td align="center">Energy at the center</td>
+    <td align="center">Objects over noisy background</td>
+    <td align="center">Background removed</td>
+  </tr>
+</table>
+</div>
 
 The image matches the two-object phantom and is consistent across resolutions and projection counts. Residual artifacts in one object are likely due to magnet temperature drift or electromagnetic interference.
 
