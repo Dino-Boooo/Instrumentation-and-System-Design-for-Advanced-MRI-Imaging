@@ -38,6 +38,7 @@ The signal we start from is a proton spin echo from a water phantom. It is a few
 **Key outcomes**
 
 - A complete, software-defined MRI system controlled from a single Python GUI
+- RF coil matched to 50 Ω with **−34.8 dB** return loss at 3.30 MHz
 - Echo detected at **3.318 MHz** with a time-domain SNR of about **26 dB**
 - Spectral linewidth reduced from **1953 Hz to ~1220 Hz** by shimming
 - A first image from **32-angle projection reconstruction**
@@ -73,6 +74,12 @@ Before writing any imaging code, we assembled the hardware and measured how each
 | Gradient and shim coils + amplifier (gain ≈ 11) | Spatial encoding and field correction |
 | NanoVNA, Hall probe | Coil characterization and B₀ mapping |
 
+<p align="center">
+  <img src="images/rf_front_end.jpg" width="70%" alt="RF front-end board with attenuator, T/R switch, preamplifier, low-pass filter and mixer">
+  <br>
+  <em>The RF front end on the bench: attenuator, T/R switch, preamplifier, 3.5 MHz low-pass filter, and mixer, powered from a 12 V supply.</em>
+</p>
+
 ### Software
 
 - Python 3 with NumPy, SciPy, and Matplotlib
@@ -85,8 +92,8 @@ Before writing any imaging code, we assembled the hardware and measured how each
 | --- | --- | --- |
 | Attenuator | Switching speed and insertion loss | Switches 0 ↔ 6 dB in ~180 ns, fast enough to gate within a pulse sequence. Adds a steady ~1.8 dB beyond its 6 dB setting across 1.5–4.7 V input |
 | T/R switch | Insertion loss vs. drive level (attenuator contribution removed) | Non-linear: ~5.7–5.9 dB up to 2 V input, falling to ~2.9 dB at 5 V. Low-amplitude pulses lose more power, which set our usable RF amplitude range |
-| Receive chain | Noise floor at each stage | 1.12 mV (digitizer) → 5 mV (after preamp); low-pass filter loss ≈ 10.25 dB; LO-induced DC offset at the mixer output |
-| RF coil | Impedance and matching | 0.76 + j56.6 Ω. The calculated matching capacitors (746 pF / 107 pF) did not work on the bench, so we tuned them empirically to 517 pF / 47 pF to reach 50 Ω |
+| Receive chain | Noise and signal level at each test point | Noise floor (std) 1.12 mV at the digitizer → 5 mV after the preamp. Low-pass filter loss ≈ 10.25 dB. A 1.3 V preamp output dropped to 0.85 V at the mixer (conversion loss). We swept the LO drive (1.5 / 2.0 / 2.5 V) and kept **1.5 V**. The LO alone puts a DC offset on the mixer output, and terminating the coil port in 50 Ω visibly lowered the noise |
+| RF coil | Impedance, Q, and matching | Measured 0.76 + j56.6 Ω at 3.3 MHz, far from the 1.71 + j102.6 Ω estimated beforehand, so we recalculated the matching network. The calculated capacitors (746 pF / 107 pF) still did not work on the bench, so we tuned them empirically to 517 pF / 47 pF. Result: 49.5 − j1.75 Ω, S11 = −34.8 dB (VSWR 1.04) at 3.30 MHz. Unloaded Q ≈ 74 |
 | Magnet | B₀ map with a Hall probe | Estimated the Larmor frequency and field uniformity at the sample position |
 
 <p align="center">
@@ -94,6 +101,20 @@ Before writing any imaging code, we assembled the hardware and measured how each
   <br>
   <em>Transmit-path insertion loss measured with a swept drive level. The attenuator is flat, while the T/R switch loses less power at higher drive.</em>
 </p>
+
+<p align="center">
+  <img src="images/coil_matching_s11.png" width="70%" alt="Smith chart and S11 return loss of the matched RF coil">
+  <br>
+  <em>The matched RF coil on the NanoVNA: the Smith chart passes through 50 Ω and S11 dips to −34.8 dB at 3.30 MHz.</em>
+</p>
+
+**Receiver bring-up checklist.** These measurements also gave us a quick test routine to run before each session:
+
+1. Confirm 12 V at the preamplifier supply.
+2. Inject a known sine wave above 3 MHz into a 50 Ω-terminated input.
+3. Measure the signal at each test point (preamp, low-pass, IF) and compare with the reference levels above.
+4. Check the noise floor at each point.
+5. Apply the LO and confirm the IF output sits at the expected frequency and amplitude.
 
 ### Signal and timing groundwork
 
@@ -184,13 +205,22 @@ set_wavegen(0, freq, amplitude, Tp, predelay, Npulse)   # W1: two RF pulses
 Trig_AD2  = 3*predelay + 2.5*Tp - (Tacq/2)      # window centered on the echo
 ```
 
+**Synchronizing two AD2s.** Arming one device is not enough. Both boards are armed, and AD2 #2's digital output is explicitly configured before AD2 #1 fires the sequence. Without that extra step, the gradient board never saw the trigger:
+
+```python
+set_ad2_device(1); arm_dio(SeqTime); arm_analog()     # gradient board
+set_ad2_device(0); arm_dio(SeqTime); arm_analog()     # RF / acquisition board
+set_ad2_device(1); dwf.FDwfDigitalOutConfigure(hdwf, c_int(1))   # required for AD2 #2
+set_ad2_device(0); trigger_and_read_ch0(rgdSamples, numSamp)    # fire and acquire
+```
+
 The receiver is protected by two timing lines: the T/R switch (DIO 2) and the attenuator (DIO 3). The T/R window opens 50 µs before the first pulse and closes 110 µs after the second, which leaves margin for coil ring-down.
 
-Retuning parameters by editing code was slow, so we built a **Tkinter GUI**. You enter frequency, amplitude, TE, Tp, sampling rate, Tacq, target resolution, ramp time, and number of averages. The GUI recalculates predelay, sample count, gradient strength, and the required AD2 voltage as you type. Parameter sets can be saved and loaded as CSV files, and the last run is kept in `Recent.csv`.
+Retuning parameters by editing code was slow, so we built a **Tkinter GUI**. It started as a small standalone gradient-strength calculator and grew into the control panel for the whole sequence. You enter frequency, amplitude, TE, Tp, sampling rate, Tacq, target resolution, ramp time, and number of averages. The GUI recalculates predelay, sample count, gradient strength, and the required AD2 voltage as you type. Parameter sets can be saved and loaded as CSV files, and the last run is kept in `Recent.csv`.
 
 ### Phase 2: Echo detection and signal conditioning
 
-**Finding the resonance.** The exact Larmor frequency of our magnet was unknown, so we swept the RF frequency from **3.2 to 3.6 MHz in 10 kHz steps**, acquiring and plotting at each step. The echo appeared at **3.318 MHz**, which became our operating frequency.
+**Finding the resonance.** The exact Larmor frequency of our magnet was unknown, so we ran a coarse sweep from **3.2 to 3.6 MHz in 10 kHz steps**, then a fine sweep from **3.30 to 3.34 MHz in 2 kHz steps**, acquiring and plotting at each step. The echo appeared at **3.318 MHz**, which became our operating frequency.
 
 **Heterodyne receiver.** Instead of digitizing 3.3 MHz directly, W2 on AD2 #1 generates a local oscillator offset from the RF frequency. The mixer then brings the echo down to a low intermediate frequency (IF): 100 kHz at first, and 200 kHz in the final system. A 1 MS/s capture covers this comfortably.
 
@@ -207,7 +237,17 @@ rgdSamples_win  = rgdSamples_filt * np.hamming(len(rgdSamples_filt))
 | ![Raw capture](images/echo_raw.png) | ![Filtered echo](images/echo_filtered.png) |
 | ![Unfiltered spectrum](images/spectrum_unfiltered.png) | ![Filtered spectrum](images/spectrum_filtered.png) |
 
-**Optimizing the drive.** We increased the RF amplitude step by step (1 V to 5 V for a 500 µs pulse) until stronger drive no longer improved the echo. The best echo reached an SNR of about **26 dB** in the time domain.
+**Optimizing the drive.** We increased the RF amplitude step by step (1 V to 5 V for a 500 µs pulse) until stronger drive no longer improved the echo. Our best echo used 5 V, Tp = 200 µs, and TE = 10 ms.
+
+**Characterizing the echo.** We wrote analysis code to measure the echo automatically:
+
+- **Decay:** the envelope falls to 37 % of its peak about **0.28 ms** after the peak, so T₂\* ≈ 0.28 ms.
+- **Linewidth:** FWHM of **2075 Hz (≈ 628 ppm)** before shimming.
+- **SNR:** **26 dB** for the echo in the time domain, but only **7 dB** for the spectrum against its background. This gap showed us how much room there was to improve.
+
+| Echo decay analysis | Linewidth (FWHM) analysis |
+| :---: | :---: |
+| ![Echo decay](images/echo_decay.png) | ![Echo linewidth](images/echo_linewidth.png) |
 
 ### Phase 3: Field optimization (shimming)
 
@@ -231,14 +271,29 @@ From the residual linewidth we derived the gradient strength needed for imaging.
 
 AD2 #2 plays 4096-point custom gradient waveforms, built sample by sample and started by AD2 #1's external trigger. Every lobe has linear ramps of `T_ramp`, which keeps the amplifier and coils within their slew limits. The script also plots the waveforms before every shot so the timing can be checked by eye.
 
-The GUI converts the target resolution into the voltage the AD2 must output:
+**From resolution to volts.** We worked out the conversion chain by hand first, then built it into the GUI. Take a 6.4 ms acquisition and a 0.333 mm target resolution:
+
+| Step | Relation | Value |
+| --- | --- | --- |
+| Frequency per pixel | 1 / Tacq | 156.25 Hz |
+| Gradient (Hz/mm) | (1 / Tacq) / resolution | ≈ 469 Hz/mm |
+| Gradient (G/cm) | ÷ 425.7 Hz/mm per G/cm (protons) | 1.10 G/cm |
+| Coil current | coil efficiency 0.5 G/cm per A | 2.2 A |
+| Coil voltage | × 4 Ω coil resistance | 8.8 V |
+| AD2 output | ÷ amplifier gain 11 | 0.80 V |
 
 ```python
 G_strength  = ((1/Tacq) / resolution) / 425.7   # Hz/mm → G/cm for protons
-G_strength *= 1.28 / 0.56                        # empirical correction for our coils
-V_grad      = 4 * (G_strength / 0.5)             # voltage into the gradient coils
+G_strength *= 1.28 / 0.56                        # empirical correction, added after gradient tests
+V_grad      = 4 * (G_strength / 0.5)             # 0.5 G/cm per A, 4 Ω coil
 V_AD2       = V_grad / 11                        # gradient amplifier gain ≈ 11
 ```
+
+We checked the GUI against an oscilloscope. Changing Tacq from 8 ms to 6.4 ms raised the computed gradient from 0.88 to 1.10 G/cm, and the AD2 output from 0.64 to 0.80 V, matching the hand calculation. The scope showed the dephase and readout lobes landing where the timing lines said they should.
+
+| GUI with derived gradient values | Gradient lobes and timing lines on the scope |
+| :---: | :---: |
+| <img src="images/gui_gradient.jpg" width="320" alt="Parameter GUI showing derived gradient values"> | <img src="images/gradient_scope.jpg" width="420" alt="Oscilloscope showing gradient waveform and DIO timing lines"> |
 
 We tested each gradient axis separately. With the gradient on, the line spreads into a projection of the sample: **5000 Hz** wide on Z and **4531 Hz** on X for the same requested resolution. That mismatch is why we added the empirical `1.28 / 0.56` correction and a per-axis scale factor.
 
@@ -261,9 +316,15 @@ We went from 8 to 16 to 32 projections. Getting a recognizable image out of the 
 1. **Wider filter.** Gradients spread the signal over several kHz, so the band-pass grew from IF ± 10 kHz to ± 20 kHz and finally ± 40 kHz.
 2. **Retuned shims** for the imaging setup.
 3. **Per-axis gradient calibration**, so the projections have equal width at every angle.
-4. **Projection centering.** Projections drifted off center from angle to angle, which blurs a backprojection badly, so each one is shifted back to a common center.
-5. **Noise floor removal.** Values below 30 % of each projection's peak are set to zero.
+4. **Projection centering.** Projections drifted off center from angle to angle, which blurs a backprojection badly. The drift grew steadily with angle, reaching about 28 frequency bins by the last projection. We shifted each one back to a common center with a per-angle offset.
+5. **Noise floor removal.** Values below 20–30 % of each projection's peak are set to zero.
 6. **Backprojection.** The projections are stacked into a sinogram and reconstructed with `skimage.transform.iradon`. We compared plain backprojection with Hamming-filtered backprojection.
+
+| 8 projections: sinogram | 8 projections: backprojection |
+| :---: | :---: |
+| ![8-projection sinogram](images/sinogram_8.png) | ![8-projection backprojection](images/backprojection_8.png) |
+
+With only 8 angles the backprojection is dominated by streaks. Going to 32 angles fills in the image:
 
 | 32 projections | Sinogram | Backprojection |
 | :---: | :---: | :---: |
@@ -322,8 +383,10 @@ magnitude_image[magnitude_image <= 0.2 * np.max(magnitude_image)] = 0
 
 | Metric | Value |
 | --- | --- |
+| RF coil match | S11 = −34.8 dB at 3.30 MHz (VSWR 1.04), unloaded Q ≈ 74 |
 | Resonance frequency | 3.318 MHz |
-| Echo SNR (time domain) | ≈ 26 dB |
+| Echo SNR (time domain / spectrum) | ≈ 26 dB / ≈ 7 dB |
+| Echo decay to 37 % (T₂\*) | ≈ 0.28 ms |
 | Linewidth before / after shimming | 1953 Hz / ~1220 Hz |
 | Gradient spread (Z / X, before calibration) | 5000 Hz / 4531 Hz |
 | Projection reconstruction | 32 angles over 180° |
@@ -393,7 +456,7 @@ Set the parameters in the GUI and press **Run**:
 | Npulse | 2 | Number of RF pulses |
 | sampFreq | 1 000 000 | Digitizer sample rate (Hz) |
 | Tacq (ms) | 8.192 | Acquisition window |
-| Resolution (mm) | 333 | Target resolution (sets gradient strength) |
+| Resolution | 333 | Target resolution in µm (333 → 0.333 mm; the GUI label reads "mm") |
 | T_ramp (ms) | 5 | Gradient ramp time |
 | Num Averages | 1 | Averages per phase-encode step |
 | Filtering / Window / Gradient / Shim | on | Enable each stage |
