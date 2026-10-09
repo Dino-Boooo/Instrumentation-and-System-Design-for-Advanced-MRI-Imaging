@@ -83,11 +83,17 @@ Before writing any imaging code, we assembled the hardware and measured how each
 
 | Block | What we measured | Result and how we used it |
 | --- | --- | --- |
-| Attenuator | Switching speed | 0 ↔ 6 dB in ~180 ns, fast enough to gate within a pulse sequence |
-| T/R switch | Insertion loss vs. drive level | Non-linear: ~5.7 dB at 0.5 V, ~2.9 dB at 5 V. This set our usable RF amplitude range |
+| Attenuator | Switching speed and insertion loss | Switches 0 ↔ 6 dB in ~180 ns, fast enough to gate within a pulse sequence. Adds a steady ~1.8 dB beyond its 6 dB setting across 1.5–4.7 V input |
+| T/R switch | Insertion loss vs. drive level (attenuator contribution removed) | Non-linear: ~5.7–5.9 dB up to 2 V input, falling to ~2.9 dB at 5 V. Low-amplitude pulses lose more power, which set our usable RF amplitude range |
 | Receive chain | Noise floor at each stage | 1.12 mV (digitizer) → 5 mV (after preamp); low-pass filter loss ≈ 10.25 dB; LO-induced DC offset at the mixer output |
 | RF coil | Impedance and matching | 0.76 + j56.6 Ω. The calculated matching capacitors (746 pF / 107 pF) did not work on the bench, so we tuned them empirically to 517 pF / 47 pF to reach 50 Ω |
 | Magnet | B₀ map with a Hall probe | Estimated the Larmor frequency and field uniformity at the sample position |
+
+<p align="center">
+  <img src="images/transmit_insertion_loss.png" width="70%" alt="Insertion loss of the attenuator and T/R switch versus input voltage">
+  <br>
+  <em>Transmit-path insertion loss measured with a swept drive level. The attenuator is flat, while the T/R switch loses less power at higher drive.</em>
+</p>
 
 ### Signal and timing groundwork
 
