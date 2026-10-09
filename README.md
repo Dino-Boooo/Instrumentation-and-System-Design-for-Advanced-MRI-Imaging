@@ -107,16 +107,16 @@ We characterized every hardware block on the bench before imaging, rather than r
     <th>Its spectrum</th>
   </tr>
   <tr>
-    <td align="center"><img src="images/sinc_pulse.png" width="400" alt="Sinc pulse"></td>
-    <td align="center"><img src="images/sinc_spectrum.png" width="394" alt="Sinc spectrum"></td>
+    <td align="center"><img src="images/sinc_pulse.png" width="300" alt="Sinc pulse"></td>
+    <td align="center"><img src="images/sinc_spectrum.png" width="295" alt="Sinc spectrum"></td>
   </tr>
   <tr>
     <th>Two-pulse sequence</th>
     <th>Control lines</th>
   </tr>
   <tr>
-    <td align="center"><img src="images/two_pulse_sequence.png" width="400" alt="Two-pulse sequence"></td>
-    <td align="center"><img src="images/control_lines.png" width="391" alt="Control lines"></td>
+    <td align="center"><img src="images/two_pulse_sequence.png" width="300" alt="Two-pulse sequence"></td>
+    <td align="center"><img src="images/control_lines.png" width="293" alt="Control lines"></td>
   </tr>
 </table>
 
@@ -205,7 +205,7 @@ DC shim offsets on AD2 #2 (limited to ±0.2 V) correct B₀ inhomogeneity, with 
 
 | Before shimming | After shimming |
 | :---: | :---: |
-| <img src="images/spectrum_before_shim.png" width="291" alt="Before shimming"> | <img src="images/spectrum_after_shim.png" width="291" alt="After shimming"> |
+| <img src="images/spectrum_before_shim.png" width="240" alt="Before shimming"> | <img src="images/spectrum_after_shim.png" width="240" alt="After shimming"> |
 
 ### Phase 4: Spatial encoding with gradients
 
