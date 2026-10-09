@@ -92,7 +92,7 @@ We characterized every hardware block on the bench before imaging, rather than r
 
 | Transmit-path insertion loss | Matched coil (NanoVNA) |
 | :---: | :---: |
-| ![Insertion loss](images/transmit_insertion_loss.png) | ![Coil matching](images/coil_matching_s11.png) |
+| <img src="images/transmit_insertion_loss.png" width="420" alt="Insertion loss of the attenuator and T/R switch versus input voltage"> | <img src="images/coil_matching_s11.png" width="416" alt="Smith chart and S11 return loss of the matched RF coil"> |
 
 ### Signal and timing groundwork
 
@@ -101,9 +101,24 @@ We characterized every hardware block on the bench before imaging, rather than r
 - **Custom waveforms.** Programmable ramps (length, delay, shape, channel) became the gradient lobes.
 - **First sequence.** Two RF pulses (TE = 6 ms), a ramp waveform, and T/R and pulse-control lines formed the skeleton of the imaging sequence.
 
-| Sinc pulse | Its spectrum | Two-pulse sequence | Control lines |
-| :---: | :---: | :---: | :---: |
-| ![Sinc pulse](images/sinc_pulse.png) | ![Sinc spectrum](images/sinc_spectrum.png) | ![Two-pulse sequence](images/two_pulse_sequence.png) | ![Control lines](images/control_lines.png) |
+<table>
+  <tr>
+    <th>Sinc pulse</th>
+    <th>Its spectrum</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="images/sinc_pulse.png" width="400" alt="Sinc pulse"></td>
+    <td align="center"><img src="images/sinc_spectrum.png" width="394" alt="Sinc spectrum"></td>
+  </tr>
+  <tr>
+    <th>Two-pulse sequence</th>
+    <th>Control lines</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="images/two_pulse_sequence.png" width="400" alt="Two-pulse sequence"></td>
+    <td align="center"><img src="images/control_lines.png" width="391" alt="Control lines"></td>
+  </tr>
+</table>
 
 ---
 
