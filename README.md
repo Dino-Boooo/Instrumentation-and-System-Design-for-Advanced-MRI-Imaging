@@ -1,52 +1,94 @@
 # Instrumentation and System Design for Advanced MRI Imaging
 
-**Building a benchtop MRI scanner over one semester: from a noisy trace on a USB scope to a 2D image of a two-object phantom.**
+**A low-cost benchtop MRI scanner built from two USB oscilloscope boards, a permanent magnet, a hand-wound RF coil, and custom Python software. It takes a phantom from a noisy millivolt echo to a 2D image.**
 
-This repository comes from the lab sequence of **MR Engineering (ECEN 463/763 · BMEN 427/627)** at Texas A&M University, Fall 2024. Over eleven labs we turned two **Digilent Analog Discovery 2 (AD2)** boards, a small permanent magnet, a hand-wound RF coil, and our own Python code into a working MRI system. This README tells the story in the order we built it, with a focus on how the code was tuned, step by step, until the phantom became visible.
-
-**Authors:** Austin Janszen, Jen Li Kao
+**Team:** Austin Janszen, Jen Li Kao · Texas A&M University · Fall 2024
 
 <p align="center">
   <img src="images/k_space.png" width="30%" alt="Phase-encoded k-space">
   <img src="images/reconstructed_image.png" width="30%" alt="Reconstructed image">
   <img src="images/filtered_image.png" width="30%" alt="Reconstructed image after thresholding">
   <br>
-  <em>Final result (Lab 10/11). Left to right: measured k-space, the raw 2D-FFT reconstruction, and the thresholded image, where both objects of the phantom are visible.</em>
+  <em>Final result. Left to right: measured k-space, the 2D-FFT reconstruction, and the cleaned image, where both objects of the phantom are visible.</em>
 </p>
 
 ---
 
 ## Table of contents
 
-1. [The short version](#the-short-version)
-2. [System architecture](#system-architecture)
-3. [Part 1: Building the hardware chain (Labs 1 to 5)](#part-1-building-the-hardware-chain-labs-1-to-5)
-4. [Part 2: Finding and cleaning up the echo (Lab 6)](#part-2-finding-and-cleaning-up-the-echo-lab-6)
-5. [Part 3: Gradients and shimming (Labs 7 and 8)](#part-3-gradients-and-shimming-labs-7-and-8)
-6. [Part 4: First image with projection reconstruction (Lab 9)](#part-4-first-image-with-projection-reconstruction-lab-9)
-7. [Part 5: Phase-encoded 2D image (Labs 10 and 11)](#part-5-phase-encoded-2d-image-labs-10-and-11)
-8. [How the signal got cleaner: a summary](#how-the-signal-got-cleaner-a-summary)
-9. [Lessons learned](#lessons-learned)
-10. [Running the code](#running-the-code)
-11. [Repository contents](#repository-contents)
+1. [Project overview](#project-overview)
+2. [Goals](#goals)
+3. [Preparation](#preparation)
+4. [System architecture](#system-architecture)
+5. [Implementation](#implementation)
+6. [Results](#results)
+7. [Challenges and lessons learned](#challenges-and-lessons-learned)
+8. [Limitations and future work](#limitations-and-future-work)
+9. [Getting started](#getting-started)
+10. [Repository structure](#repository-structure)
 
 ---
 
-## The short version
+## Project overview
 
-The signal we want is a proton spin echo from a test tube of water: a few millivolts at about **3.32 MHz**, lasting a few milliseconds, sitting right after RF pulses that are volts in size. Getting from that to a picture meant solving one problem at a time:
+Clinical MRI scanners rely on superconducting magnets and dedicated hardware worth millions of dollars. This project asks how much of that can be reproduced on a lab bench. We used two **Digilent Analog Discovery 2 (AD2)** boards, a low-field permanent magnet (proton resonance ≈ 3.32 MHz), and our own control and reconstruction software.
 
-| Stage | Problem | What we did | Lab |
-| --- | --- | --- | --- |
-| Pulse sequence | Fire RF pulses and digitize at exactly the right moments | Python control of the AD2 waveform generator, scope, and digital I/O | 1 to 2 |
-| Transmit / receive | The RF pulse must not reach (or saturate) the receiver | Characterized and timed an attenuator board and a T/R switch | 3 to 4 |
-| RF coil | Couple efficiently to the sample at the Larmor frequency | Wound a solenoid, matched it to 50 Ω, measured its Q | 5 |
-| Echo search | We did not know the exact resonance frequency | Swept the RF frequency until the echo appeared | 6 |
-| Noise | The echo is hard to see in the raw capture | Down-mixing to an IF, Chebyshev band-pass, Hamming window | 6 |
-| Field quality | B₀ inhomogeneity broadens the line | DC shim currents; linewidth 1953 Hz → ~1220 Hz | 8 to 9 |
-| Spatial encoding | Make frequency depend on position | Ramped gradient waveforms from a second AD2, calibrated to our coils | 7 to 9 |
-| Image (version 1) | Turn projections into a picture | 32 rotated-gradient projections, centering, backprojection | 9 |
-| Image (version 2) | Get a true 2D Fourier image | 32 phase-encode steps, k-space windowing, 2D FFT, thresholding | 10 to 11 |
+The signal we start from is a proton spin echo from a water phantom. It is a few millivolts in size, lasts a few milliseconds, and arrives right after RF pulses that are volts in size. The project builds the full chain needed to turn that signal into an image: pulse sequencing, the transmit/receive front end, signal processing, shimming, gradient encoding, and image reconstruction.
+
+**Key outcomes**
+
+- A complete, software-defined MRI system controlled from a single Python GUI
+- Echo detected at **3.318 MHz** with a time-domain SNR of about **26 dB**
+- Spectral linewidth reduced from **1953 Hz to ~1220 Hz** by shimming
+- A first image from **32-angle projection reconstruction**
+- A final **32 × 64 phase-encoded 2D Fourier image** that matches the layout of a two-object phantom
+
+---
+
+## Goals
+
+| # | Objective | Success criterion |
+| --- | --- | --- |
+| 1 | Build a working spectrometer from general-purpose instruments | RF pulses, receiver gating, and digitization synchronized to within microseconds |
+| 2 | Reliably detect a spin echo | Echo clearly visible above the noise at a known resonance frequency |
+| 3 | Improve signal quality | Narrower linewidth and higher SNR through shimming and signal processing |
+| 4 | Encode spatial information | Calibrated gradients whose spectral spread matches the requested resolution |
+| 5 | Produce a 2D image | A reconstruction that matches the geometry of the phantom |
+
+---
+
+## Preparation
+
+Before writing any imaging code, we assembled the hardware and measured how each block actually behaved, instead of relying on nominal values. These measurements set the operating limits used in the rest of the project.
+
+### Hardware
+
+| Component | Role |
+| --- | --- |
+| 2 × Digilent Analog Discovery 2 | AD2 #1: RF transmit, local oscillator, digitizer, timing lines. AD2 #2: gradient and shim waveforms |
+| Low-field permanent magnet | B₀ field, proton resonance ≈ 3.32 MHz |
+| Hand-wound solenoid RF coil | Transmits the RF pulses and receives the echo |
+| Attenuator board, T/R switch | Shape the transmit pulse and isolate the receiver |
+| Preamplifier, 3.5 MHz low-pass filter, mixer | Receive chain and down-conversion |
+| Gradient and shim coils + amplifier (gain ≈ 11) | Spatial encoding and field correction |
+| NanoVNA, Hall probe | Coil characterization and B₀ mapping |
+
+### Software
+
+- Python 3 with NumPy, SciPy, and Matplotlib
+- Digilent WaveForms SDK (`dwf` library and `dwfconstants.py`)
+- Tkinter for the control GUI
+
+### Hardware characterization
+
+| Block | What we measured | Result and how we used it |
+| --- | --- | --- |
+| Attenuator | Switching speed | 0 ↔ 6 dB in ~180 ns, fast enough to gate within a pulse sequence |
+| T/R switch | Insertion loss vs. drive level | Non-linear: ~5.7 dB at 0.5 V, ~2.9 dB at 5 V. This set our usable RF amplitude range |
+| Receive chain | Noise floor at each stage | 1.12 mV (digitizer) → 5 mV (after preamp); low-pass filter loss ≈ 10.25 dB; LO-induced DC offset at the mixer output |
+| RF coil | Impedance and matching | 0.76 + j56.6 Ω. The calculated matching capacitors (746 pF / 107 pF) did not work on the bench, so we tuned them empirically to 517 pF / 47 pF to reach 50 Ω |
+| Magnet | B₀ map with a Hall probe | Estimated the Larmor frequency and field uniformity at the sample position |
+| Sampling | Digitizer settings | Confirmed aliasing limits; chose 1 MS/s with an 8.192 ms window (122 Hz bins) |
 
 ---
 
@@ -79,91 +121,100 @@ AD2 #1 is the master clock. Its digital outputs drive the attenuator, the T/R sw
 
 ---
 
-## Part 1: Building the hardware chain (Labs 1 to 5)
+## Implementation
 
-**Labs 1 and 2: the AD2 as a spectrometer.** We started from the AD2 SDK and wrote helpers that every later script reuses: `set_wavegen()` for RF bursts, `set_scope()` for triggered single acquisitions, and `set_dio()` for timing lines, which counts in 10 µs ticks. With these we built a two-pulse sequence with MRI-like timing (TE = 6 ms, predelay = TE/2), added the control lines, and learned the sampling rules the hard way: at 250 kS/s an 8 ms window is 2000 samples, and a 1 MHz test tone was visibly aliased.
+The project was carried out in six phases. Each phase built on the previous one and solved one specific obstacle between the raw signal and the final image.
 
-**Lab 3: the transmit front end.** We measured what the hardware actually does instead of trusting nominal values. The attenuator board switches between 0 and 6 dB in about **180 ns**, and the transmit chain through the T/R switch is not linear: its insertion loss drops from ~5.7 dB at 0.5 V input to ~2.9 dB at 5 V. These measurements later set our RF amplitude range.
+| Phase | Focus | Obstacle | Solution |
+| --- | --- | --- | --- |
+| 1 | Control software | Fire RF pulses and digitize at exactly the right moments | Python driver layer for the AD2 and a parameter GUI |
+| 2 | Echo detection | Unknown exact resonance; echo buried in noise | Frequency sweep, heterodyne receiver, zero-phase filtering |
+| 3 | Field optimization | B₀ inhomogeneity broadens the line | DC shimming with linewidth feedback |
+| 4 | Spatial encoding | Make frequency and phase depend on position | Ramped, calibrated gradient waveforms on a second AD2 |
+| 5 | Prototype imaging | Turn spatially encoded signals into a picture | 32-angle projection reconstruction |
+| 6 | Final imaging | Higher-fidelity 2D image | Phase encoding and 2D Fourier reconstruction |
 
-**Lab 4: the receive front end.** We followed the signal through the preamplifier, the 3.5 MHz low-pass filter, and the mixer. The digitizer noise floor had a standard deviation of **1.12 mV**, rising to **5 mV** after the preamplifier. The low-pass filter costs about **10.25 dB**, and the LO alone puts a DC offset on the mixer output. Knowing each of these numbers made later debugging much faster.
+### Phase 1: Control software and pulse sequence
 
-**Lab 5: the RF coil.** We wound a solenoid coil, measured its impedance on a NanoVNA (0.76 + j56.6 Ω), and matched it to 50 Ω with switchable capacitors. The values we calculated (746 pF / 107 pF) were not what worked on the bench, so we tuned the switches empirically to 517 pF / 47 pF. We also mapped B₀ with a Hall probe to estimate the Larmor frequency and field uniformity of our magnet station.
+We wrapped the WaveForms SDK in a small driver layer that all later code reuses:
 
----
+- `set_wavegen()` generates RF bursts and the local oscillator
+- `set_scope()` sets up a triggered single acquisition
+- `set_dio()` drives the timing lines, counting in 10 µs ticks
 
-## Part 2: Finding and cleaning up the echo (Lab 6)
-
-This is where the project became MRI. The sequence is a classic spin echo: a 90° pulse, a 180° pulse TE/2 later, and an echo at TE.
+The core sequence is a **spin echo**: a 90° pulse, a 180° pulse TE/2 later, and an echo at TE. The digitizer trigger is computed so that the acquisition window is centered on the echo:
 
 ```python
-predelay = (TE / 2) - Tp                     # pulse centers are TE/2 apart
+predelay  = (TE / 2) - Tp                       # pulse centers are TE/2 apart
 set_wavegen(0, freq, amplitude, Tp, predelay, Npulse)   # W1: two RF pulses
-Echo_time = 3*predelay + 2.5*Tp - (Tacq/2)  # start of a window centered on the echo
+Trig_AD2  = 3*predelay + 2.5*Tp - (Tacq/2)      # window centered on the echo
 ```
 
-**Searching for the echo.** We did not know the exact resonance of our magnet, so the code swept the RF frequency from **3.2 to 3.6 MHz in 10 kHz steps**, acquiring and plotting at each step until an echo appeared. It showed up at **3.318 MHz**, and that became our center frequency.
+The receiver is protected by two timing lines: the T/R switch (DIO 2) and the attenuator (DIO 3). The T/R window opens 50 µs before the first pulse and closes 110 µs after the second, which leaves margin for coil ring-down.
 
-**Heterodyne receiver.** Rather than digitize 3.3 MHz directly, W2 on AD2 #1 plays a local oscillator offset from the RF frequency, and the mixer brings the echo down to a low intermediate frequency (100 kHz at this stage). A 1 MS/s capture of 8.192 ms then gives a clean spectrum with 122 Hz bins.
+Retuning parameters by editing code was slow, so we built a **Tkinter GUI**. You enter frequency, amplitude, TE, Tp, sampling rate, Tacq, target resolution, ramp time, and number of averages. The GUI recalculates predelay, sample count, gradient strength, and the required AD2 voltage as you type. Parameter sets can be saved and loaded as CSV files, and the last run is kept in `Recent.csv`.
 
-**Filtering.** The raw capture is dominated by noise and a DC offset. We added a 6th-order Chebyshev type II band-pass around the IF, applied with `filtfilt` so it adds no phase shift, then a Hamming window before the FFT.
+### Phase 2: Echo detection and signal conditioning
+
+**Finding the resonance.** The exact Larmor frequency of our magnet was unknown, so we swept the RF frequency from **3.2 to 3.6 MHz in 10 kHz steps**, acquiring and plotting at each step. The echo appeared at **3.318 MHz**, which became our operating frequency.
+
+**Heterodyne receiver.** Instead of digitizing 3.3 MHz directly, W2 on AD2 #1 generates a local oscillator offset from the RF frequency. The mixer then brings the echo down to a low intermediate frequency (IF): 100 kHz at first, and 200 kHz in the final system. A 1 MS/s capture covers this comfortably.
+
+**Filtering.** The raw capture is dominated by noise and a DC offset from the mixer. We apply a 6th-order Chebyshev type II band-pass around the IF using `filtfilt`, which is zero-phase, so the filter does not distort the signal phase. A Hamming window before the FFT reduces spectral leakage. Spectra from repeated shots can be averaged to lower the noise further.
 
 ```python
-b, a = cheby2(6, 40, [lowCut, highCut], btype="band")   # IF ± 10 kHz in Lab 6
+b, a = cheby2(6, 40, [lowCut, highCut], btype="band")
 rgdSamples_filt = filtfilt(b, a, rgdSamples)            # zero-phase
 rgdSamples_win  = rgdSamples_filt * np.hamming(len(rgdSamples_filt))
 ```
 
 | Raw capture | After band-pass + window |
 | :---: | :---: |
-| ![Raw capture](images/lab6_echo_raw.png) | ![Filtered echo](images/lab6_echo_filtered.png) |
-| ![Unfiltered spectrum](images/lab6_spectrum_unfiltered.png) | ![Filtered spectrum](images/lab6_spectrum_filtered.png) |
+| ![Raw capture](images/echo_raw.png) | ![Filtered echo](images/echo_filtered.png) |
+| ![Unfiltered spectrum](images/spectrum_unfiltered.png) | ![Filtered spectrum](images/spectrum_filtered.png) |
 
-We also raised the RF amplitude step by step (1 V to 5 V for a 500 µs pulse) until a larger drive no longer improved the echo. The best echo had an SNR of about **26 dB** in the time domain.
+**Optimizing the drive.** We increased the RF amplitude step by step (1 V to 5 V for a 500 µs pulse) until stronger drive no longer improved the echo. The best echo reached an SNR of about **26 dB** in the time domain.
 
----
+### Phase 3: Field optimization (shimming)
 
-## Part 3: Gradients and shimming (Labs 7 and 8)
+An uneven B₀ field makes spins dephase faster, which broadens the spectral line and weakens the echo. We added DC shim offsets on AD2 #2, limited in software to ±0.2 V to protect the coils. After each adjustment we measured the linewidth (FWHM) and used it as feedback.
 
-**A GUI for the whole sequence (Labs 7 and 8).** Retuning parameters by editing code was slowing us down, so we built a Tkinter GUI and extended it lab by lab. In its final form you enter frequency, amplitude, TE, Tp, sampling rate, Tacq, target resolution, ramp time, and averages, and it recalculates predelay, sample count, gradient strength, and the required AD2 voltage as you type. Parameter sets can be saved and loaded as CSV, and the last run is kept in `Recent.csv`.
+| Condition | Linewidth |
+| --- | --- |
+| Before shimming | 1953 Hz |
+| After shimming | ~1220 Hz |
 
-**Gradient waveforms.** AD2 #2 plays 4096-point custom waveforms built sample by sample, started by AD2 #1's external trigger. Each lobe has linear ramps of `T_ramp` so the amplifier and coils stay within their slew limits. The script plots the waveforms before every shot so the timing can be checked by eye.
+<p align="center">
+  <img src="images/spectrum_before_shim.png" width="45%" alt="Echo spectrum before shimming">
+  <img src="images/spectrum_after_shim.png" width="45%" alt="Echo spectrum after shimming">
+  <br>
+  <em>Echo spectrum before (left) and after (right) shimming.</em>
+</p>
 
-**From resolution to volts.** The GUI converts the target resolution into a gradient strength, then into the voltage the AD2 must output:
+From the residual linewidth we derived the gradient strength needed for imaging. For gradient broadening to dominate the remaining linewidth by an order of magnitude, the gradient had to be about **447 Hz/mm (1.05 G/cm)**.
+
+### Phase 4: Spatial encoding with gradients
+
+AD2 #2 plays 4096-point custom gradient waveforms, built sample by sample and started by AD2 #1's external trigger. Every lobe has linear ramps of `T_ramp`, which keeps the amplifier and coils within their slew limits. The script also plots the waveforms before every shot so the timing can be checked by eye.
+
+The GUI converts the target resolution into the voltage the AD2 must output:
 
 ```python
 G_strength  = ((1/Tacq) / resolution) / 425.7   # Hz/mm → G/cm for protons
-G_strength *= 1.28 / 0.56                        # empirical correction for our coils (added in Lab 9)
+G_strength *= 1.28 / 0.56                        # empirical correction for our coils
 V_grad      = 4 * (G_strength / 0.5)             # voltage into the gradient coils
 V_AD2       = V_grad / 11                        # gradient amplifier gain ≈ 11
 ```
 
-**Shimming (Lab 8).** An uneven B₀ field makes the spins dephase faster, which broadens the spectral line and weakens the echo. We added DC shim offsets on AD2 #2, limited in software to ±0.2 V to protect the coils, and measured the linewidth (FWHM) after each change:
-
-| | Linewidth |
-| --- | --- |
-| Before shimming | 1953 Hz |
-| After shimming (X = 0.2 V, second axis = 0.2 V) | ~1220 Hz |
-
-<p align="center">
-  <img src="images/lab8_spectrum_before_shim.png" width="45%" alt="Echo spectrum before shimming">
-  <img src="images/lab9_spectrum_shimmed.png" width="45%" alt="Echo spectrum after shimming">
-  <br>
-  <em>Echo spectrum before shimming (left) and after shimming (right, 1250 Hz linewidth in Lab 9).</em>
-</p>
-
-We then worked out how strong the gradient had to be so that gradient broadening would dominate the residual linewidth by an order of magnitude. For a 2500 Hz gradient-dominated line, that came to about **447 Hz/mm (1.05 G/cm)**.
-
----
-
-## Part 4: First image with projection reconstruction (Lab 9)
-
-With a shimmed echo (linewidth **1250 Hz**) we verified the gradients one axis at a time. Turning a gradient on spreads the line into a projection of the sample: **5000 Hz** wide with the Z gradient and **4531 Hz** with the X gradient.
+We tested each gradient axis separately. With the gradient on, the line spreads into a projection of the sample: **5000 Hz** wide on Z and **4531 Hz** on X for the same requested resolution. That mismatch is why we added the empirical `1.28 / 0.56` correction and a per-axis scale factor.
 
 | Shimmed echo, no gradient | Same sample, Z gradient on |
 | :---: | :---: |
-| ![Shimmed spectrum](images/lab9_spectrum_shimmed.png) | ![Z gradient spectrum](images/lab9_spectrum_z_gradient.png) |
+| ![Shimmed spectrum](images/spectrum_after_shim.png) | ![Z gradient spectrum](images/spectrum_z_gradient.png) |
 
-To make an image we rotated the readout gradient by mixing the two axes, then acquired one projection per angle:
+### Phase 5: Prototype imaging by projection reconstruction
+
+Our first imaging method rotated the readout gradient by mixing the two axes, then acquired one projection per angle:
 
 ```python
 theta = n * np.pi / num_projections
@@ -171,31 +222,29 @@ GxWFRM[i] = GxWFRM[i] * gradient_scale * np.sin(theta)
 GzWFRM[i] = GzWFRM[i] * gradient_scale * np.cos(theta)
 ```
 
-We started with 8 projections, then went to 16 and 32. Getting a recognizable image out of the projections took several rounds of tuning:
+We went from 8 to 16 to 32 projections. Getting a recognizable image out of the projections took several rounds of tuning:
 
 1. **Wider filter.** Gradients spread the signal over several kHz, so the band-pass grew from IF ± 10 kHz to ± 20 kHz and finally ± 40 kHz.
-2. **Shim retuned** (X = 0.2 V, Z = −0.1 V).
-3. **Gradient calibration.** The two axes gave different spreads for the same requested resolution (5000 Hz vs 4531 Hz), so we added the empirical `1.28 / 0.56` correction and a per-axis scale factor.
-4. **Centering each projection.** The projections drifted off center from angle to angle, which blurs a backprojection badly. We shifted each projection back to a common center before reconstruction.
-5. **Noise floor removal.** Values below 30 % of each projection's peak were set to zero.
-6. **Backprojection.** We stacked the projections into a sinogram and reconstructed with `skimage.transform.iradon`, comparing plain backprojection with Hamming-filtered backprojection.
+2. **Retuned shims** for the imaging setup.
+3. **Per-axis gradient calibration**, so the projections have equal width at every angle.
+4. **Projection centering.** Projections drifted off center from angle to angle, which blurs a backprojection badly, so each one is shifted back to a common center.
+5. **Noise floor removal.** Values below 30 % of each projection's peak are set to zero.
+6. **Backprojection.** The projections are stacked into a sinogram and reconstructed with `skimage.transform.iradon`. We compared plain backprojection with Hamming-filtered backprojection.
 
 | 32 projections | Sinogram | Backprojection |
 | :---: | :---: | :---: |
-| ![Projections](images/lab9_projections_32.png) | ![Sinogram](images/lab9_sinogram_32.png) | ![Backprojection](images/lab9_backprojection_32.png) |
+| ![Projections](images/projections_32.png) | ![Sinogram](images/sinogram_32.png) | ![Backprojection](images/backprojection_32.png) |
 
-This gave our first image of the "mystery phantom". It also showed the limits of the approach: every small error in alignment or calibration smears across the whole image.
+This produced our first image of the phantom. It also showed the weakness of the method: every small alignment or calibration error smears across the whole image. That motivated the switch to Fourier imaging.
 
----
+### Phase 6: Final imaging with phase encoding
 
-## Part 5: Phase-encoded 2D image (Labs 10 and 11)
+For the final system we moved to **phase encoding with 2D Fourier reconstruction**, the approach used in clinical scanners. Each shot uses two gradients:
 
-For the final image we switched to **phase encoding** with a Fourier reconstruction. This is the method used in clinical scanners. Each shot now has two gradients:
-
-- **Frequency encoding (AD2 #2, W1):** a dephase lobe starting right after the 90° pulse, then a readout lobe centered on the echo.
+- **Frequency encoding (AD2 #2, W1):** a dephase lobe right after the 90° pulse, then a readout lobe centered on the echo.
 - **Phase encoding (AD2 #2, W2):** a lobe played at the same time as the dephase lobe, whose amplitude changes from shot to shot.
 
-**32 lines of k-space.** The sequence repeats 32 times, stepping the phase-encode amplitude from −G<sub>max</sub> to +G<sub>max</sub>:
+**Acquisition.** The sequence runs 32 times, stepping the phase-encode amplitude from −G<sub>max</sub> to +G<sub>max</sub>:
 
 ```python
 Npe = 32
@@ -203,18 +252,16 @@ Phase_encode_steps  = np.linspace(-Gpe_max, Gpe_max, Npe)
 Phase_encode_steps += np.min(np.abs(Phase_encode_steps))   # make one step exactly zero
 ```
 
-A symmetric 32-point grid has no zero. The shift makes one step land exactly at zero, so the **center of k-space**, where most of the signal energy is, is actually sampled.
+A symmetric 32-point grid has no zero. The shift makes one step land exactly at zero, so the **center of k-space**, where most of the signal energy is, is actually sampled. The IF is 200 kHz with a ± 40 kHz zero-phase band-pass. Zero phase matters even more here, because phase encoding stores position in the signal's phase. Each step's averaged spectrum is saved to `phase_encode_data_<n>_v1.txt`.
 
-**Acquisition changes for the final run.** We moved the IF to **200 kHz** and kept the ± 40 kHz zero-phase band-pass. Zero phase matters even more here, because phase encoding stores position in the signal's phase. Each step's spectrum is averaged and saved to `phase_encode_data_<n>_v1.txt`.
+**Reconstruction** ([`Phase_Encode_reconstruction.py`](Phase_Encode_reconstruction.py)). We validated this pipeline on a reference data set before applying it to our own scans:
 
-**Reconstruction** ([`Phase_Encode_reconstruction.py`](Phase_Encode_reconstruction.py)). We first developed this on the course's example data set, then applied it to our own scans:
-
-1. **Isolate the signal.** Keep the 64 FFT bins around the 200 kHz IF and discard the rest of the spectrum.
-2. **Build k-space.** Inverse-FFT each 64-bin slice back to the time domain to get one k-space line, then stack the 32 lines into a 32 × 64 matrix.
-3. **2D Hamming apodization.** `outer(hamming(32), hamming(64))` tapers the edges of k-space and suppresses the ringing caused by having so few samples.
+1. **Isolate the signal.** Keep the 64 FFT bins around the IF and discard the rest of the spectrum.
+2. **Build k-space.** Inverse-FFT each 64-bin slice to get one k-space line, then stack the lines into a 32 × 64 matrix.
+3. **2D Hamming apodization.** Taper the edges of k-space to suppress ringing from the small matrix.
 4. **2D FFT and magnitude.**
-5. **Re-centering.** An empirical `np.roll` shift moves the objects to the middle of the field of view.
-6. **Threshold.** Pixels below 20 % of the maximum are set to zero, which removes the speckled background.
+5. **Re-centering.** Shift the image with `np.roll` so the objects sit in the middle of the field of view.
+6. **Thresholding.** Set pixels below 20 % of the maximum to zero to remove the speckled background.
 
 ```python
 k_space_data *= np.outer(np.hamming(Npe), np.hamming(64))
@@ -222,48 +269,76 @@ magnitude_image = np.abs(np.fft.fft2(k_space_data))
 magnitude_image[magnitude_image <= 0.2 * np.max(magnitude_image)] = 0
 ```
 
+---
+
+## Results
+
+### Final image
+
 | k-space | Raw reconstruction | After thresholding |
 | :---: | :---: | :---: |
 | ![k-space](images/k_space.png) | ![Reconstructed](images/reconstructed_image.png) | ![Filtered](images/filtered_image.png) |
 | Energy concentrated at the center | Both objects visible over a noisy background | Background removed |
 
-The reconstruction matched the layout of the two-object phantom and stayed consistent when we changed the resolution and the number of projection angles. One of the objects still showed artifacts; we suspect environmental factors such as magnet temperature drift or electromagnetic interference in the lab. The slides we presented are in [`Final_Image_Result.pdf`](Final_Image_Result.pdf).
+- The reconstruction **matches the layout of the two-object phantom**.
+- Results stayed **consistent** across different resolutions and numbers of projections.
+- One object still shows artifacts, most likely from environmental factors such as magnet temperature drift or electromagnetic interference.
 
----
+### Key metrics
 
-## How the signal got cleaner: a summary
+| Metric | Value |
+| --- | --- |
+| Resonance frequency | 3.318 MHz |
+| Echo SNR (time domain) | ≈ 26 dB |
+| Linewidth before / after shimming | 1953 Hz / ~1220 Hz |
+| Gradient spread (Z / X, before calibration) | 5000 Hz / 4531 Hz |
+| Projection reconstruction | 32 angles over 180° |
+| Fourier image matrix | 32 phase-encode × 64 frequency-encode |
 
-| Step | Change in the code | Effect |
+### How each step improved the signal
+
+| Step | Change | Effect |
 | --- | --- | --- |
-| Frequency sweep | Loop RF over 3.2 to 3.6 MHz | Found the resonance at 3.318 MHz |
+| Frequency sweep | RF swept 3.2 to 3.6 MHz | Found the resonance at 3.318 MHz |
 | Echo-centered trigger | `Trig_AD2 = 3*predelay + 2.5*Tp − Tacq/2` | Acquisition window sits on the echo |
-| Down-mixing | LO at f₀ − IF on AD2 #1 W2 | Echo moved to 100 kHz, later 200 kHz |
-| Band-pass | Chebyshev II, order 6, `filtfilt` | Noise and DC removed with no phase distortion |
-| Window | Hamming before the FFT | Less spectral leakage |
-| Averaging | Sum spectra over `Num Averages` shots | Noise averages down, echo adds up |
+| Down-mixing | LO at f₀ − IF | Echo moved to a low IF that is easy to digitize |
+| Band-pass filter | Chebyshev II, order 6, `filtfilt` | Noise and DC removed with no phase distortion |
+| Windowing | Hamming before the FFT | Less spectral leakage |
+| Averaging | Spectra summed over repeated shots | Noise averages down while the echo adds up |
 | Shimming | DC offsets on AD2 #2 | Linewidth 1953 Hz → ~1220 Hz |
-| Gradient calibration | `× 1.28 / 0.56` plus per-axis scale | Gradient spread matches the requested resolution |
-| Projection centering | Per-angle shift before backprojection | Sharper projection-reconstruction image |
-| k-space window | 64 bins around the IF + 2D Hamming | Less noise and ringing in the 2D image |
-| Threshold | Zero pixels below 20 % of max | Clean background, objects stand out |
+| Gradient calibration | × 1.28 / 0.56 plus per-axis scale | Gradient spread matches the requested resolution |
+| Projection centering | Per-angle shift before backprojection | Sharper projection image |
+| k-space windowing | 64 bins around the IF + 2D Hamming | Less noise and ringing |
+| Thresholding | Pixels below 20 % of max set to zero | Clean background, objects stand out |
+
+The final presentation slides are in [`Final_Image_Result.pdf`](Final_Image_Result.pdf).
 
 ---
 
-## Lessons learned
+## Challenges and lessons learned
 
 - **Timing is everything.** The attenuator, T/R switch, LO, digitizer, and gradients have to line up to within microseconds. Using one AD2 as the master trigger for the other made that possible.
-- **Measure the hardware.** Calculated matching capacitors, nominal insertion losses, and theoretical gradient strengths all needed correcting against bench measurements.
-- **Protect the phase.** Zero-phase filtering and a sampled k-space center were essential for phase encoding.
-- **Small misalignments matter.** In projection reconstruction a few bins of drift per angle visibly blurred the image until we re-centered every projection.
+- **Measure, don't assume.** The calculated matching capacitors, the nominal insertion losses, and the theoretical gradient strengths all had to be corrected against bench measurements.
+- **Protect the phase.** Zero-phase filtering and a sampled k-space center were essential for phase encoding to work.
+- **Small misalignments add up.** In projection reconstruction, a few bins of drift per angle visibly blurred the image until each projection was re-centered.
 - **Low-field MRI is sensitive to its surroundings.** Temperature drift and electromagnetic interference remained the main limits on image quality.
 
 ---
 
-## Running the code
+## Limitations and future work
+
+- **Resolution.** The 32 × 64 matrix limits detail. More phase-encode steps would sharpen the image, at the cost of a longer scan.
+- **Environmental stability.** Temperature control of the magnet and better RF shielding should reduce the residual artifacts.
+- **Manual tuning.** Shim values and the image re-centering shift were set by hand. Automated shimming and phase correction would make the system more robust.
+- **Code organization.** The echo-search and projection-reconstruction scripts from Phases 2 and 5 are not yet in this repository. Folding them in, and turning the AD2 helpers into a shared module, would make the project easier to reuse.
+
+---
+
+## Getting started
 
 ### Requirements
 
-- **Hardware:** 2 × Digilent Analog Discovery 2, a low-field magnet, a tuned and matched RF coil, the RF front end (attenuator, T/R switch, preamp, mixer), and gradient and shim coils with an amplifier (gain ≈ 11)
+- **Hardware:** see [Preparation](#preparation)
 - **Software:** Python 3, [Digilent WaveForms](https://digilent.com/reference/software/waveforms/waveforms-3/start), and `dwfconstants.py` from the WaveForms SDK samples (`WaveForms/samples/py/`) placed next to the scripts
 - **Python packages:** `pip install numpy scipy matplotlib` (`tkinter` ships with Python)
 
@@ -289,7 +364,7 @@ Set the parameters in the GUI and press **Run**:
 | Num Averages | 1 | Averages per phase-encode step |
 | Filtering / Window / Gradient / Shim | on | Enable each stage |
 
-Shim offsets are set in the code (`offset0`, `offset1`, limited to ±0.2 V). They are 0 V in the committed version. The scan writes `phase_encode_data_0_v1.txt` … `phase_encode_data_31_v1.txt`.
+Shim offsets are set in the code (`offset0`, `offset1`, limited to ±0.2 V) and are 0 V in the committed version. The scan writes `phase_encode_data_0_v1.txt` … `phase_encode_data_31_v1.txt`.
 
 ### 2. Reconstruct
 
@@ -301,16 +376,20 @@ python Phase_Encode_reconstruction.py
 
 ---
 
-## Repository contents
+## Repository structure
 
-| File | Description |
-| --- | --- |
-| [`Phase_Encode_Image.py`](Phase_Encode_Image.py) | Acquisition: parameter GUI, AD2 control, spin-echo sequence, gradients, shims, filtering, data capture |
-| [`Phase_Encode_reconstruction.py`](Phase_Encode_reconstruction.py) | Reconstruction: k-space assembly, 2D Hamming window, 2D FFT, thresholding |
-| [`Final_Image_Result.pdf`](Final_Image_Result.pdf) | Final presentation slides |
-| [`images/`](images) | Figures from Labs 6, 8, 9, and 10 used in this README |
+```
+.
+├── Phase_Encode_Image.py            # Acquisition: GUI, AD2 control, spin-echo sequence, gradients, shims, filtering
+├── Phase_Encode_reconstruction.py   # Reconstruction: k-space assembly, 2D Hamming window, 2D FFT, thresholding
+├── Final_Image_Result.pdf           # Final presentation slides
+├── images/                          # Figures used in this README
+└── LICENSE
+```
 
-The earlier lab scripts (echo search, projection reconstruction) are not included in this repository. The figures from those stages are kept in `images/` to document the process.
+## Acknowledgements
+
+This project was carried out as part of the MR Engineering course (ECEN 463/763 · BMEN 427/627) at Texas A&M University in Fall 2024. We thank the course staff for providing the magnet, front-end hardware, and reference data.
 
 ## License
 
