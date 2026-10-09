@@ -88,7 +88,35 @@ Before writing any imaging code, we assembled the hardware and measured how each
 | Receive chain | Noise floor at each stage | 1.12 mV (digitizer) → 5 mV (after preamp); low-pass filter loss ≈ 10.25 dB; LO-induced DC offset at the mixer output |
 | RF coil | Impedance and matching | 0.76 + j56.6 Ω. The calculated matching capacitors (746 pF / 107 pF) did not work on the bench, so we tuned them empirically to 517 pF / 47 pF to reach 50 Ω |
 | Magnet | B₀ map with a Hall probe | Estimated the Larmor frequency and field uniformity at the sample position |
-| Sampling | Digitizer settings | Confirmed aliasing limits; chose 1 MS/s with an 8.192 ms window (122 Hz bins) |
+
+### Signal and timing groundwork
+
+Before connecting the magnet, we checked the signal-processing and instrument-control basics the whole system depends on.
+
+**RF pulse bandwidth.** We modeled a sinc RF pulse in Python and examined its spectrum with an FFT. With 16 lobes on each side, the first zero crossing falls at **187.5 µs** and the spectrum is a flat band about **10.7 kHz** wide. Shorter or more-lobed pulses excite a wider band of frequencies. This trade-off guided our choice of pulse widths later.
+
+| Sinc RF pulse (16 lobes) | Its spectrum |
+| :---: | :---: |
+| ![Sinc pulse](images/sinc_pulse.png) | ![Sinc spectrum](images/sinc_spectrum.png) |
+
+**Triggering and sampling.** We positioned the digitizer trigger with a DIO edge so that acquisition starts at a chosen point in the sequence. We also verified the sample budget, for example 250 kS/s × 8 ms = 2000 samples. A 1 MHz test tone sampled at 250 kS/s was clearly aliased. Since the sampling rate must be at least twice the signal frequency, we later down-mixed the echo and captured it at 1 MS/s with an 8.192 ms window (122 Hz bins).
+
+**Custom waveforms.** We programmed arbitrary waveforms on the AD2 and controlled them in software:
+
+- ramp length, set through the playback frequency (1 kHz gives a 1 ms ramp, 2 kHz gives 0.5 ms)
+- start delay, set with `AnalogOutWaitSet`
+- ramp-up / ramp-down shapes
+- output on either channel
+
+These became the building blocks of the gradient lobes.
+
+**Repetition time.** We wrapped the acquisition in a loop with a programmable repetition time (TR). For a 6 s target the measured TR was about 6.2 s, so we knew how much overhead each shot adds.
+
+**First pulse sequence.** Putting these pieces together, we built a two-pulse sequence with MRI-like timing (TE = 6 ms, predelay = TE/2), a ramp waveform on the second channel, and the T/R switch and pulse-control lines on DIO 2 and DIO 3. This was the skeleton of the final imaging sequence.
+
+| Two RF pulses + ramp waveform | Timing control lines |
+| :---: | :---: |
+| ![Two-pulse sequence](images/two_pulse_sequence.png) | ![Control lines](images/control_lines.png) |
 
 ---
 
@@ -136,7 +164,7 @@ The project was carried out in six phases. Each phase built on the previous one 
 
 ### Phase 1: Control software and pulse sequence
 
-We wrapped the WaveForms SDK in a small driver layer that all later code reuses:
+Building on the [groundwork](#signal-and-timing-groundwork), we wrapped the WaveForms SDK in a small driver layer that all later code reuses:
 
 - `set_wavegen()` generates RF bursts and the local oscillator
 - `set_scope()` sets up a triggered single acquisition
