@@ -151,7 +151,7 @@ These became the building blocks of the gradient lobes.
 
 ```mermaid
 flowchart LR
-    PC["Python + Tkinter GUI<br/>(Phase_Encode_Image.py)"]
+    PC["Python + Tkinter GUI<br/>(phase_encoding/Phase_Encode_Image.py)"]
     subgraph AD2_1["AD2 #1: RF and acquisition (master)"]
         W1a["W1: RF pulses<br/>~3.32 MHz"]
         W2a["W2: LO<br/>f₀ − IF"]
@@ -349,7 +349,7 @@ Phase_encode_steps += np.min(np.abs(Phase_encode_steps))   # make one step exact
 
 A symmetric 32-point grid has no zero. The shift makes one step land exactly at zero, so the **center of k-space**, where most of the signal energy is, is actually sampled. The IF is 200 kHz with a ± 40 kHz zero-phase band-pass. Zero phase matters even more here, because phase encoding stores position in the signal's phase. Each step's averaged spectrum is saved to `phase_encode_data_<n>_v1.txt`.
 
-**Reconstruction** ([`Phase_Encode_reconstruction.py`](Phase_Encode_reconstruction.py)). We validated this pipeline on a reference data set before applying it to our own scans:
+**Reconstruction** ([`phase_encoding/Phase_Encode_reconstruction.py`](phase_encoding/Phase_Encode_reconstruction.py)). We validated this pipeline on a reference data set before applying it to our own scans:
 
 1. **Isolate the signal.** Keep the 64 FFT bins around the IF and discard the rest of the spectrum.
 2. **Build k-space.** Inverse-FFT each 64-bin slice to get one k-space line, then stack the lines into a 32 × 64 matrix.
@@ -427,7 +427,7 @@ The final presentation slides are in [`Final_Image_Result.pdf`](Final_Image_Resu
 - **Resolution.** The 32 × 64 matrix limits detail. More phase-encode steps would sharpen the image, at the cost of a longer scan.
 - **Environmental stability.** Temperature control of the magnet and better RF shielding should reduce the residual artifacts.
 - **Manual tuning.** Shim values and the image re-centering shift were set by hand. Automated shimming and phase correction would make the system more robust.
-- **Code organization.** The echo-search and projection-reconstruction scripts from Phases 2 and 5 are not yet in this repository. Folding them in, and turning the AD2 helpers into a shared module, would make the project easier to reuse.
+- **Code organization.** Each stage is a standalone script that repeats the same AD2 helper functions and GUI. Moving the helpers into a shared module would make the project easier to maintain and reuse.
 
 ---
 
@@ -437,11 +437,28 @@ The final presentation slides are in [`Final_Image_Result.pdf`](Final_Image_Resu
 
 - **Hardware:** see [Preparation](#preparation)
 - **Software:** Python 3, [Digilent WaveForms](https://digilent.com/reference/software/waveforms/waveforms-3/start), and `dwfconstants.py` from the WaveForms SDK samples (`WaveForms/samples/py/`) placed next to the scripts
-- **Python packages:** `pip install numpy scipy matplotlib` (`tkinter` ships with Python)
+- **Python packages:** `pip install numpy scipy matplotlib scikit-image` (`tkinter` ships with Python; `scikit-image` is only needed for projection reconstruction)
+
+### Scripts by project stage
+
+Each script runs on its own; place `dwfconstants.py` in the same folder before running any acquisition script.
+
+| Stage | Script | What it does |
+| --- | --- | --- |
+| Echo detection (Phase 2) | [`echo_detection/echo_search.py`](echo_detection/echo_search.py) | Acquires and filters a spin echo; includes a disabled frequency-sweep block for finding the resonance |
+| Shimming and gradient test (Phases 3–4) | [`shimming/shim_and_gradient_test.py`](shimming/shim_and_gradient_test.py) | GUI-driven echo with shim offsets and gradients; reports the linewidth (FWHM) |
+| Projection imaging (Phase 5) | [`projection_imaging/projection_acquisition.py`](projection_imaging/projection_acquisition.py) | Acquires one projection per gradient angle and saves `projection_<n>_v2.txt` |
+| | [`projection_imaging/projection_reconstruction.py`](projection_imaging/projection_reconstruction.py) | Centers the projections and reconstructs them by backprojection |
+| Phase-encoded imaging (Phase 6) | [`phase_encoding/Phase_Encode_Image.py`](phase_encoding/Phase_Encode_Image.py) | Final 32-step phase-encode acquisition |
+| | [`phase_encoding/Phase_Encode_reconstruction.py`](phase_encoding/Phase_Encode_reconstruction.py) | k-space assembly and 2D Fourier reconstruction |
+| Tools | [`tools/gradient_calculator.py`](tools/gradient_calculator.py) | Standalone gradient-strength calculator (the GUI's first prototype) |
+
+The steps below run the final phase-encoded scan.
 
 ### 1. Acquire
 
 ```bash
+cd phase_encoding
 python Phase_Encode_Image.py
 ```
 
@@ -465,7 +482,7 @@ Shim offsets are set in the code (`offset0`, `offset1`, limited to ±0.2 V) and 
 
 ### 2. Reconstruct
 
-Set `directory` in `Phase_Encode_reconstruction.py` to the folder containing the data files, then run:
+Put the 32 data files in a `phase_encode_data/` folder next to the script (or change `directory` in `Phase_Encode_reconstruction.py`), then run:
 
 ```bash
 python Phase_Encode_reconstruction.py
@@ -477,10 +494,20 @@ python Phase_Encode_reconstruction.py
 
 ```
 .
-├── Phase_Encode_Image.py            # Acquisition: GUI, AD2 control, spin-echo sequence, gradients, shims, filtering
-├── Phase_Encode_reconstruction.py   # Reconstruction: k-space assembly, 2D Hamming window, 2D FFT, thresholding
-├── Final_Image_Result.pdf           # Final presentation slides
-├── images/                          # Figures used in this README
+├── echo_detection/
+│   └── echo_search.py                   # Spin-echo acquisition, filtering, frequency sweep
+├── shimming/
+│   └── shim_and_gradient_test.py        # Shim offsets, gradient test, linewidth measurement
+├── projection_imaging/
+│   ├── projection_acquisition.py        # Rotating-gradient projection acquisition
+│   └── projection_reconstruction.py     # Projection centering and backprojection
+├── phase_encoding/
+│   ├── Phase_Encode_Image.py            # Final acquisition: GUI, spin echo, gradients, shims, phase encoding
+│   └── Phase_Encode_reconstruction.py   # k-space assembly, 2D Hamming window, 2D FFT, thresholding
+├── tools/
+│   └── gradient_calculator.py           # Standalone gradient-strength calculator
+├── Final_Image_Result.pdf               # Final presentation slides
+├── images/                              # Figures used in this README
 └── LICENSE
 ```
 
