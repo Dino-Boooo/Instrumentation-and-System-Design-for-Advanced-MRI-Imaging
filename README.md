@@ -1,6 +1,6 @@
 # Instrumentation and System Design for Advanced MRI Imaging
 
-**A low-cost benchtop MRI scanner built from two USB instrument boards, a permanent magnet, a hand-wound RF coil, and custom Python software.**
+**A benchtop MRI system built from two USB instrument boards, a permanent magnet, a hand-wound RF coil, and custom Python software.**
 
 **Team:** Austin Janszen, Jen Li Kao · Texas A&M University · Fall 2024
 
@@ -31,7 +31,7 @@
 
 ## Overview
 
-Clinical MRI relies on superconducting magnets and costly dedicated hardware. This project builds a working MRI system on a lab bench instead, using two **Digilent Analog Discovery 2 (AD2)** boards, a low-field permanent magnet (≈ 3.32 MHz proton resonance), and our own control and reconstruction code.
+This project explores how MRI works by building a small system from the ground up. Using two **Digilent Analog Discovery 2 (AD2)** boards, a low-field permanent magnet (≈ 3.32 MHz proton resonance), and our own control and reconstruction code, we implemented each stage of the imaging chain ourselves to understand the physics and engineering behind it.
 
 The starting signal is a spin echo from a water phantom: a few millivolts, a few milliseconds long, right after volt-level RF pulses. We built the full chain from that signal to an image: pulse sequencing, RF front end, signal processing, shimming, gradient encoding, and reconstruction.
 
