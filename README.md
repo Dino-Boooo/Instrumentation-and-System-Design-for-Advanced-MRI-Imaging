@@ -2,7 +2,7 @@
 
 **A benchtop MRI system built from two USB instrument boards, a permanent magnet, a hand-wound RF coil, and custom Python software.**
 
-**Team:** Austin Janszen, Jen Li Kao · Texas A&M University · Fall 2024
+**Authors:** Austin Janszen, Jen Li Kao
 
 <p align="center">
   <img src="images/k_space.png" width="30%" alt="Phase-encoded k-space">
