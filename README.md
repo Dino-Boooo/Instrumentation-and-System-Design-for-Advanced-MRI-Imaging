@@ -190,14 +190,14 @@ rgdSamples_win  = rgdSamples_filt * np.hamming(len(rgdSamples_filt))
 
 | Raw capture | Filtered + windowed |
 | :---: | :---: |
-| ![Raw capture](images/echo_raw.png) | ![Filtered echo](images/echo_filtered.png) |
-| ![Unfiltered spectrum](images/spectrum_unfiltered.png) | ![Filtered spectrum](images/spectrum_filtered.png) |
+| <img src="images/echo_raw.png" width="307" alt="Raw capture"> | <img src="images/echo_filtered.png" width="312" alt="Filtered echo"> |
+| <img src="images/spectrum_unfiltered.png" width="291" alt="Unfiltered spectrum"> | <img src="images/spectrum_filtered.png" width="291" alt="Filtered spectrum"> |
 
 Automated analysis of the best echo gave T₂\* ≈ **0.28 ms**, an unshimmed linewidth of **2075 Hz (628 ppm)**, and SNR of **26 dB** (echo) vs. **7 dB** (spectrum).
 
 | Echo decay | Linewidth (FWHM) |
 | :---: | :---: |
-| ![Echo decay](images/echo_decay.png) | ![Echo linewidth](images/echo_linewidth.png) |
+| <img src="images/echo_decay.png" width="325" alt="Echo decay"> | <img src="images/echo_linewidth.png" width="297" alt="Echo linewidth"> |
 
 ### Phase 3: Shimming
 
@@ -205,7 +205,7 @@ DC shim offsets on AD2 #2 (limited to ±0.2 V) correct B₀ inhomogeneity, with 
 
 | Before shimming | After shimming |
 | :---: | :---: |
-| ![Before shimming](images/spectrum_before_shim.png) | ![After shimming](images/spectrum_after_shim.png) |
+| <img src="images/spectrum_before_shim.png" width="291" alt="Before shimming"> | <img src="images/spectrum_after_shim.png" width="291" alt="After shimming"> |
 
 ### Phase 4: Spatial encoding with gradients
 
