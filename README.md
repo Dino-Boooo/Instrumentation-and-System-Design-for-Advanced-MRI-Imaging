@@ -1,4 +1,4 @@
-# Instrumentation and System Design for Advanced MRI Imaging
+# Benchtop MRI System
 
 **A benchtop MRI system built from two USB instrument boards, a permanent magnet, a hand-wound RF coil, and custom Python software.**
 
