@@ -326,9 +326,22 @@ We went from 8 to 16 to 32 projections. Getting a recognizable image out of the 
 
 With only 8 angles the backprojection is dominated by streaks. Going to 32 angles fills in the image:
 
-| 32 projections | Sinogram | Backprojection |
-| :---: | :---: | :---: |
-| ![Projections](images/projections_32.png) | ![Sinogram](images/sinogram_32.png) | ![Backprojection](images/backprojection_32.png) |
+<table>
+  <tr>
+    <th>32 projections</th>
+    <th>Sinogram</th>
+  </tr>
+  <tr>
+    <td rowspan="3" align="center"><img src="images/projections_32.png" width="460" alt="32 projections"></td>
+    <td align="center"><img src="images/sinogram_32.png" width="285" alt="Sinogram"></td>
+  </tr>
+  <tr>
+    <th>Backprojection</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="images/backprojection_32.png" width="265" alt="Backprojection"></td>
+  </tr>
+</table>
 
 This produced our first image of the phantom. It also showed the weakness of the method: every small alignment or calibration error smears across the whole image. That motivated the switch to Fourier imaging.
 
