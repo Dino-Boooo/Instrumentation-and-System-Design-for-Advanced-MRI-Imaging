@@ -526,7 +526,7 @@ python Phase_Encode_reconstruction.py
 
 ## Acknowledgements
 
-This project was carried out as part of the MR Engineering course (ECEN 463/763 · BMEN 427/627) at Texas A&M University in Fall 2024. We thank the course staff for providing the magnet, front-end hardware, and reference data.
+Developed in the MR Engineering course at Texas A&M University (Fall 2024), which provided the magnet, RF front-end hardware, AD2 starter code, and reference data.
 
 ## License
 
