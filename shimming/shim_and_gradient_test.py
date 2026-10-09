@@ -723,7 +723,7 @@ for i in range(0, num_averages +1):
         plt.plot(time2,rgdSamples_hamming)
         plt.xlabel("Time (ms)")
         plt.ylabel("Voltage")
-        plt.title("Austin Janszen")
+        plt.title("Echo")
         fig1 = plt.show()
         # FFT of echo
         fft_values = fft(rgdSamples_hamming)
@@ -732,7 +732,7 @@ for i in range(0, num_averages +1):
         plt.plot(fft_freqs[len(fft_freqs)//12:len(fft_freqs)//8], np.abs(fft_values)[len(fft_freqs)//12:len(fft_values)//8], label='FFT of Echo')
         plt.xlabel('Frequency [Hz]')
         plt.ylabel('Magnitude')
-        plt.title('FFT of Echo')
+        plt.title("Echo FFT")
         plt.grid()
         plt.legend()
   
@@ -748,7 +748,7 @@ for i in range(0, num_averages +1):
         plt.plot(time2,rgdSamples)
         plt.xlabel("Time (ms)")
         plt.ylabel("Voltage")
-        plt.title("Austin Janszen")
+        plt.title("Echo")
         fig1 = plt.show()
               
     
@@ -760,7 +760,7 @@ for i in range(0, num_averages +1):
         plt.plot(fft_freqs[len(fft_freqs)//12:len(fft_freqs)//8], np.abs(fft_values)[len(fft_freqs)//12:len(fft_values)//8], label='FFT of Echo')
         plt.xlabel('Frequency [Hz]')
         plt.ylabel('Magnitude')
-        plt.title('FFT of Echo')
+        plt.title("Echo FFT")
         plt.grid()
         plt.legend()
         
